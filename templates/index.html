@@ -31,7 +31,7 @@
         }
 
         .gauge-header {
-            background-color: #555555;
+            background-color: #2f343b;
             color: white;
             font-size: 20px;
             font-weight: bold;
@@ -62,6 +62,7 @@
             letter-spacing: 0.5px;
         }
 
+        /* Interactive Hover Tooltip */
         #tooltip {
             position: absolute;
             bottom: 5px;
@@ -83,19 +84,19 @@
 <body>
 
     <div class="card">
-        <div class="gauge-header" id="headerTitle">Neutral CHF</div>
+        <div class="gauge-header" id="headerTitle">Loading...</div>
         
         <div class="canvas-container">
             <canvas id="gaugeCanvas" width="300" height="170"></canvas>
             <div id="tooltip">Hover over dial zones</div>
         </div>
 
-        <div id="statusText">0.0000</div>
+        <div id="statusText">--</div>
     </div>
 
     <script>
         let currentScore = 0;
-        let globalAngle = Math.PI; 
+        let globalAngle = Math.PI; // Persistent state variable declared globally
         let animationFrameId = null;
 
         function renderGauge(score, needleAngleTarget) {
@@ -109,25 +110,27 @@
             const radius = 115;
             const thickness = 20;
 
+            // Background Outer Ring Rim
             ctx.beginPath();
             ctx.arc(cx, cy, radius + 10, Math.PI, 2 * Math.PI);
             ctx.lineWidth = 4;
             ctx.strokeStyle = '#dcdcdc';
             ctx.stroke();
 
+            // Inner White Dial Background
             ctx.beginPath();
             ctx.arc(cx, cy, radius - thickness / 2, Math.PI, 2 * Math.PI, false);
             ctx.fillStyle = '#ffffff';
             ctx.fill();
 
-            // 1. Draw Red Zone (Bearish)
+            // 1. Draw Red Zone
             ctx.beginPath();
             ctx.arc(cx, cy, radius, Math.PI, Math.PI + 1.22);
             ctx.lineWidth = thickness;
             ctx.strokeStyle = '#e05353';
             ctx.stroke();
 
-            // 2. Draw Blue Zone (Bullish)
+            // 2. Draw Blue Zone
             ctx.beginPath();
             ctx.arc(cx, cy, radius, Math.PI + 1.92, 2 * Math.PI);
             ctx.lineWidth = thickness;
@@ -188,7 +191,7 @@
             ctx.lineCap = 'round';
             ctx.stroke();
 
-            // 6. Draw Central Pivot Cap
+            // 6. Draw Central Pivot Blue Cap
             ctx.beginPath();
             ctx.arc(cx, cy, 14, 0, 2 * Math.PI);
             ctx.fillStyle = '#2f65d8';
@@ -200,6 +203,7 @@
             ctx.fill();
         }
 
+        // --- Interactivity: Mouse Hover Tooltips ---
         const canvas = document.getElementById('gaugeCanvas');
         const tooltip = document.getElementById('tooltip');
 
@@ -218,16 +222,17 @@
 
                 tooltip.style.opacity = '1';
                 
+                // Updated tooltips matching the 0.5 / 0.1 threshold scheme
                 if (angle >= Math.PI && angle < Math.PI + 1.22) {
-                    tooltip.innerText = "Very Bearish CHF (Score < -0.3)";
+                    tooltip.innerText = "Very Bearish CHF (Score < -0.5)";
                 } else if (angle >= Math.PI + 1.22 && angle < Math.PI + 1.48) {
-                    tooltip.innerText = "Bearish CHF (Score < -0.06)";
+                    tooltip.innerText = "Bearish CHF (Score < -0.1)";
                 } else if (angle >= Math.PI + 1.48 && angle < Math.PI + 1.66) {
-                    tooltip.innerText = "Neutral CHF";
+                    tooltip.innerText = "Neutral CHF (-0.1 to 0.1)";
                 } else if (angle >= Math.PI + 1.66 && angle < Math.PI + 1.92) {
-                    tooltip.innerText = "Bullish CHF (Score > 0.06)";
+                    tooltip.innerText = "Bullish CHF (Score > 0.1)";
                 } else {
-                    tooltip.innerText = "Very Bullish CHF (Score > 0.3)";
+                    tooltip.innerText = "Very Bullish CHF (Score > 0.5)";
                 }
             } else {
                 tooltip.style.opacity = '0';
@@ -240,21 +245,21 @@
 
         async function loadLiveGauge() {
             try {
-                const response = await fetch('/api/data');
-                const resultData = await response.json();
-                
-                const data = Array.isArray(resultData) ? resultData[0] : resultData;
-                const score = (data && data.score !== undefined) ? parseFloat(data.score) : 0; 
+                const response = await fetch('/api/score');
+                const data = await response.json();
+                const score = data.score; 
+                const notionStatus = data.status; // Fetches the live formatted string from Notion
                 currentScore = score;
 
-                const minVal = -0.3; 
-                const maxVal = 0.3;
+                const minVal = -0.5;
+                const maxVal = 0.5;
                 let clampedScore = Math.max(minVal, Math.min(maxVal, score));
                 let normalized = (clampedScore - minVal) / (maxVal - minVal);
                 const targetAngle = Math.PI + (normalized * Math.PI);
 
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
+                // HARD RESET: Immediately jump the tracking angle back to the extreme left baseline (Math.PI) before animating up to target
                 globalAngle = Math.PI;
 
                 function animate() {
@@ -269,22 +274,18 @@
                 const headerEl = document.getElementById('headerTitle');
                 const statusEl = document.getElementById('statusText');
                 
+                // Display the score number at the bottom text field
                 statusEl.innerText = score.toFixed(4);
 
-                if (score > 0.3) {
-                    headerEl.innerText = "Very Bullish CHF";
+                // Directly assign the text string pulled straight from your Notion Database 'Bias' property
+                headerEl.innerText = notionStatus;
+
+                // Dynamically adjust header background color based on the text content
+                if (notionStatus.includes("Bullish")) {
                     headerEl.style.backgroundColor = "#2f65d8";
-                } else if (score > 0.06) {
-                    headerEl.innerText = "Bullish CHF";
-                    headerEl.style.backgroundColor = "#2f65d8";
-                } else if (score < -0.3) {
-                    headerEl.innerText = "Very Bearish CHF";
-                    headerEl.style.backgroundColor = "#e05353";
-                } else if (score < -0.06) {
-                    headerEl.innerText = "Bearish CHF";
+                } else if (notionStatus.includes("Bearish")) {
                     headerEl.style.backgroundColor = "#e05353";
                 } else {
-                    headerEl.innerText = "Neutral CHF";
                     headerEl.style.backgroundColor = "#555555";
                 }
 
@@ -295,7 +296,7 @@
         }
 
         loadLiveGauge();
-        setInterval(loadLiveGauge, 30000);
+        setInterval(loadLiveGauge, 2000);
     </script>
 </body>
 </html>
